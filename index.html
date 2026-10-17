@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de Texto</title>
+<link rel="stylesheet" href="core.css">
+<link rel="stylesheet" href="isolated-block-editor.css">
+<style>
+:root{--bg:#f5f5f7;--chrome:rgba(246,246,248,.86);--chrome-border:#d9d9de;--text:#1d1d1f;--muted:#6e6e73;--accent:#0a84ff;--sheet:#ffffff;--sheet-border:#e3e3e8;--shadow:0 8px 30px rgba(0,0,0,.08);--menu-bg:rgba(255,255,255,.98);--hover:#e8e8ed;--radius:10px;--danger:#ff5f57;--warn:#febc2e;--ok:#28c840;}
+html[data-theme="dark"]{--bg:#1e1e20;--chrome:rgba(38,38,40,.9);--chrome-border:#454548;--text:#f5f5f7;--muted:#a1a1a6;--accent:#0a84ff;--sheet:#ffffff;--sheet-border:#e3e3e8;--menu-bg:rgba(44,44,46,.98);--hover:#3a3a3c;--shadow:0 8px 30px rgba(0,0,0,.45);}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;font-size:14px;line-height:1.5;display:flex;flex-direction:column;min-height:100vh;}
+#menubar{position:sticky;top:0;z-index:200;display:flex;align-items:center;gap:4px;background:var(--chrome);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid var(--chrome-border);padding:0 12px;height:40px;user-select:none;}
+.app-name{font-weight:700;font-size:13px;margin-right:6px;white-space:nowrap}
+.menus{display:flex;align-items:stretch;height:100%;min-width:0;flex:1}
+.menu{position:relative;display:flex}
+.menu-btn{background:none;border:0;color:var(--text);font-size:13px;font-weight:500;padding:0 10px;height:40px;cursor:pointer;border-radius:6px;white-space:nowrap;}
+.menu-btn:hover,.menu.open .menu-btn{background:var(--hover)}
+.menu-btn:focus-visible,.dropdown button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.dropdown{display:none;position:absolute;top:40px;left:0;min-width:260px;background:var(--menu-bg);border:1px solid var(--chrome-border);border-radius:var(--radius);box-shadow:var(--shadow);padding:5px;z-index:300;}
+.menu.open .dropdown{display:block}
+.dropdown button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;color:var(--text);font-size:13px;text-align:left;padding:7px 10px;border-radius:6px;cursor:pointer;}
+.dropdown button:hover:not(:disabled){background:var(--accent);color:#fff}
+.dropdown button:hover:not(:disabled) kbd{color:rgba(255,255,255,.85)}
+.dropdown button:disabled{opacity:.38;cursor:default}
+.dropdown button .lbl{flex:1}
+.dropdown kbd{font-family:inherit;font-size:11px;color:var(--muted)}
+.dropdown .sep{height:1px;background:var(--chrome-border);margin:5px 8px}
+.dropdown .check{width:16px;text-align:center;font-size:12px;visibility:hidden}
+.dropdown button[aria-checked="true"] .check{visibility:visible}
+#menuRight{margin-left:auto;display:flex;align-items:center;gap:10px;white-space:nowrap}
+#saveDot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+#saveDot.dirty{background:var(--warn)}
+#wordCountTop{font-size:12px;color:var(--muted)}
+#toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;max-width:1100px;width:100%;margin:0 auto;}
+#toolbar .group{display:flex;gap:8px}
+.btn{border:1px solid var(--sheet-border);background:var(--sheet);color:var(--text);font-size:13px;font-weight:500;padding:7px 14px;border-radius:8px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.05);}
+.btn:hover{background:var(--hover)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.4;cursor:default}
+#stage{flex:1;width:100%;max-width:1100px;margin:0 auto;padding:0 16px 24px;display:flex;flex-direction:column}
+#sheet{background:var(--sheet);color:#1d1d1f;border:1px solid var(--sheet-border);border-radius:14px;box-shadow:var(--shadow);padding:40px 48px 64px;flex:1;}
+#sheet[data-width="narrow"]{max-width:640px;margin:0 auto;width:100%}
+#sheet[data-width="normal"]{max-width:780px;margin:0 auto;width:100%}
+#sheet[data-width="wide"]{max-width:1000px;margin:0 auto;width:100%}
+html[data-focus="on"] #toolbar .group.left, html[data-focus="on"] #statusbar{display:none}
+#docTitle{width:100%;border:0;outline:none;background:transparent;color:#1d1d1f;font-size:32px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px;padding:0;}
+#docTitle::placeholder{color:#aeaeb2}
+#docSub{font-size:12px;color:#8e8e93;margin-bottom:20px}
+#editorWrap{position:relative;min-height:300px}
+#editorWrap.loading::after{content:"A carregar editor…";position:absolute;inset:40px 0 0;text-align:center;color:#8e8e93;font-size:14px;animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{50%{opacity:.4}}
+#source{display:none}
+.iso-editor [data-block-type="core/social-link"], .iso-editor [data-block-type="core/social-links"],
+.iso-editor .wp-block-social-link, .iso-editor .wp-block-social-links,
+.iso-editor .wp-block-embed[data-type="facebook"], .iso-editor .wp-block-embed[data-type="twitter"],
+.iso-editor .wp-block-embed[data-type="instagram"], .iso-editor .wp-block-embed[data-type="youtube"],
+.iso-editor .wp-block-embed[data-type="soundcloud"], .iso-editor .wp-block-embed[data-type="vimeo"],
+.iso-editor .wp-block-embed[data-type="dailymotion"] { display: none !important; }
+#statusbar{display:flex;gap:14px;align-items:center;justify-content:center;color:var(--muted);font-size:12px;padding-top:12px;flex-wrap:wrap;}
+#toasts{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:#1d1d1f;color:#fff;font-size:13px;padding:10px 16px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;max-width:90vw;}
+.toast.error{background:#b3261e} .toast.success{background:#1a7f37}
+.overlay{display:none;position:fixed;inset:0;background:transparent;z-index:400;pointer-events:none;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{pointer-events:auto;position:relative;background:var(--menu-bg);color:var(--text);border:1px solid var(--chrome-border);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);max-width:640px;width:100%;max-height:84vh;display:flex;flex-direction:column;overflow:hidden;}
+.modal header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--chrome-border);font-weight:700;cursor:grab;user-select:none}
+.modal header:active{cursor:grabbing}
+.modal header .wtitle{flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win-lights{display:flex;gap:8px;align-items:center}
+.win-lights button{width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.12);padding:0;cursor:pointer}
+.win-lights .r{background:var(--danger)} .win-lights .y{background:var(--warn)} .win-lights .g{background:var(--ok)}
+.modal.minimized .body{display:none}
+.modal.maximized{position:fixed;inset:24px;width:auto;max-width:none;max-height:none}
+.modal.maximized .body{flex:1;display:flex;flex-direction:column}
+.modal.maximized #previewFrame{flex:1;height:auto;min-height:0}
+.modal .body{padding:18px;overflow:auto;font-size:13px}
+.modal table{width:100%;border-collapse:collapse}
+.modal td{padding:6px 4px;border-bottom:1px solid var(--chrome-border)}
+.modal td:first-child{white-space:nowrap;width:170px;color:var(--muted)}
+#previewFrame{width:100%;height:60vh;border:1px solid var(--chrome-border);border-radius:8px;background:#fff}
+@media (max-width:640px){
+  .menu-btn{padding:0 6px;font-size:12px}
+  #saveLabel{display:none}
+  #sheet{padding:24px 18px 40px}
+  #docTitle{font-size:25px}
+  #wordCountTop{display:none}
+  #toolbar{padding:10px 12px}
+}
+@media print{
+  #menubar,#toolbar,#statusbar,#toasts,.overlay{display:none !important}
+  body{background:#fff}
+  #stage{max-width:none;padding:0}
+  #sheet{box-shadow:none;border:0;border-radius:0;max-width:none}
+}
+</style>
+</head>
+<body>
+
+<div id="menubar">
+  <span class="app-name">Editor</span>
+  <nav class="menus" aria-label="Menus da aplicação">
+    <div class="menu" data-menu="arquivo">
+      <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Arquivo</button>
+      <div class="dropdown" role="menu">
+        <button role="menuitem" data-action="new"><span class="lbl">Novo documento</span><kbd>Ctrl+N</kbd></button>
+        <button role="menuitem" data-action="open"><span class="lbl">Abrir arquivo…</span><kbd>Ctrl+O</kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="save"><span class="lbl">Salvar rascunho</span><kbd>Ctrl+S</kbd></button>
+        <button role="menuitem" data-action="export"><span class="lbl">Exportar para HTML</span><kbd>Ctrl+E</kbd></button>
+        <button role="menuitem" data-action="print"><span class="lbl">Imprimir</span><kbd>Ctrl+P</kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="clear"><span class="lbl">Limpar documento</span><kbd></kbd></button>
+      </div>
+    </div>
+    <div class="menu" data-menu="editar">
+      <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Editar</button>
+      <div class="dropdown" role="menu">
+        <button role="menuitem" data-action="undo"><span class="lbl">Desfazer</span><kbd>Ctrl+Z</kbd></button>
+        <button role="menuitem" data-action="redo"><span class="lbl">Refazer</span><kbd>Ctrl+Shift+Z</kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="cut"><span class="lbl">Recortar</span><kbd>Ctrl+X</kbd></button>
+        <button role="menuitem" data-action="copy"><span class="lbl">Copiar</span><kbd>Ctrl+C</kbd></button>
+        <button role="menuitem" data-action="paste"><span class="lbl">Colar</span><kbd>Ctrl+V</kbd></button>
+        <button role="menuitem" data-action="pasteText"><span class="lbl">Colar como texto puro</span><kbd></kbd></button>
+        <button role="menuitem" data-action="selectAll"><span class="lbl">Selecionar tudo</span><kbd>Ctrl+A</kbd></button>
+      </div>
+    </div>
+    <div class="menu" data-menu="formatar">
+      <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Formatar</button>
+      <div class="dropdown" role="menu">
+        <button role="menuitem" data-action="bold"><span class="lbl">Negrito</span><kbd>Ctrl+B</kbd></button>
+        <button role="menuitem" data-action="italic"><span class="lbl">Itálico</span><kbd>Ctrl+I</kbd></button>
+        <button role="menuitem" data-action="strike"><span class="lbl">Tachado</span><kbd></kbd></button>
+        <button role="menuitem" data-action="code"><span class="lbl">Código inline</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="h1"><span class="lbl">Título 1</span><kbd></kbd></button>
+        <button role="menuitem" data-action="h2"><span class="lbl">Título 2</span><kbd></kbd></button>
+        <button role="menuitem" data-action="h3"><span class="lbl">Título 3</span><kbd></kbd></button>
+        <button role="menuitem" data-action="p"><span class="lbl">Parágrafo</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="ul"><span class="lbl">Lista com marcadores</span><kbd></kbd></button>
+        <button role="menuitem" data-action="ol"><span class="lbl">Lista numerada</span><kbd></kbd></button>
+        <button role="menuitem" data-action="quote"><span class="lbl">Citação</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="link"><span class="lbl">Adicionar link…</span><kbd>Ctrl+K</kbd></button>
+        <button role="menuitem" data-action="unformat"><span class="lbl">Remover formatação</span><kbd></kbd></button>
+      </div>
+    </div>
+    <div class="menu" data-menu="exibir">
+      <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Visualizar</button>
+      <div class="dropdown" role="menu">
+        <button role="menuitem" data-action="preview"><span class="lbl">Pré-visualizar HTML</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="themeLight"><span class="check">✓</span><span class="lbl">Tema claro</span><kbd></kbd></button>
+        <button role="menuitem" data-action="themeDark"><span class="check">✓</span><span class="lbl">Tema escuro</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="wNarrow"><span class="check">✓</span><span class="lbl">Largura estreita</span><kbd></kbd></button>
+        <button role="menuitem" data-action="wNormal"><span class="check">✓</span><span class="lbl">Largura normal</span><kbd></kbd></button>
+        <button role="menuitem" data-action="wWide"><span class="check">✓</span><span class="lbl">Largura larga</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="focus"><span class="check">✓</span><span class="lbl">Modo foco</span><kbd></kbd></button>
+        <button role="menuitem" data-action="words"><span class="check">✓</span><span class="lbl">Contagem de palavras</span><kbd></kbd></button>
+      </div>
+    </div>
+    <div class="menu" data-menu="ajuda">
+      <button class="menu-btn" aria-haspopup="true" aria-expanded="false">Ajuda</button>
+      <div class="dropdown" role="menu">
+        <button role="menuitem" data-action="shortcuts"><span class="lbl">Atalhos de teclado</span><kbd></kbd></button>
+        <button role="menuitem" data-action="guide"><span class="lbl">Guia rápido</span><kbd></kbd></button>
+        <div class="sep"></div>
+        <button role="menuitem" data-action="about"><span class="lbl">Sobre o Editor</span><kbd></kbd></button>
+        <button role="menuitem" data-action="licenses"><span class="lbl">Licenças</span><kbd></kbd></button>
+      </div>
+    </div>
+  </nav>
+  <div id="menuRight">
+    <span id="wordCountTop">0 palavras</span>
+    <span id="saveDot" title="Estado de gravação"></span>
+    <span id="saveLabel" style="font-size:12px;color:var(--muted)">Pronto</span>
+  </div>
+</div>
+
+<div id="toolbar">
+  <div class="group left">
+    <button class="btn" data-action="new">Novo</button>
+    <button class="btn" data-action="open">Abrir…</button>
+  </div>
+  <div class="group" style="flex:1"></div>
+  <div class="group">
+    <button class="btn" data-action="preview">Pré-visualizar</button>
+    <button class="btn primary" data-action="export">Exportar HTML</button>
+  </div>
+</div>
+
+<main id="stage">
+  <article id="sheet" data-width="normal">
+    <input id="docTitle" type="text" placeholder="Título do documento" maxlength="160" aria-label="Título do documento"> <br><br>
+    <div id="editorWrap" class="loading">
+      <textarea id="source" rows="10" aria-hidden="true" tabindex="-1"></textarea>
+    </div>
+  </article>
+  <footer id="statusbar">
+    <span id="wordCount">0 palavras</span>
+    <span>·</span>
+    <span id="saveState">Nenhuma alteração</span>
+    <span>·</span>
+    <span>Leaditor by Leafole Labs</span>
+  </footer>
+</main>
+
+<div class="overlay" id="previewOverlay">
+  <div class="modal">
+    <header><span class="win-lights"><button class="r" data-win="close" title="Fechar" aria-label="Fechar"></button><button class="y" data-win="min" title="Minimizar" aria-label="Minimizar"></button><button class="g" data-win="max" title="Maximizar" aria-label="Maximizar"></button></span><span class="wtitle">Pré-visualização do HTML exportado</span></header>
+    <div class="body"><iframe id="previewFrame" title="Pré-visualização" sandbox=""></iframe></div>
+  </div>
+</div>
+
+<div class="overlay" id="infoOverlay">
+  <div class="modal">
+    <header><span class="win-lights"><button class="r" data-win="close" title="Fechar" aria-label="Fechar"></button><button class="y" data-win="min" title="Minimizar" aria-label="Minimizar"></button><button class="g" data-win="max" title="Maximizar" aria-label="Maximizar"></button></span><span class="wtitle" id="infoTitle">Ajuda</span></header>
+    <div class="body" id="infoBody"></div>
+  </div>
+</div>
+
+<div class="overlay" id="licenseOverlay">
+  <div class="modal">
+    <header><span class="win-lights"><button class="r" data-win="close" title="Fechar" aria-label="Fechar"></button><button class="y" data-win="min" title="Minimizar" aria-label="Minimizar"></button><button class="g" data-win="max" title="Maximizar" aria-label="Maximizar"></button></span><span class="wtitle">Licenças</span></header>
+    <div class="body" id="licenseBody"></div>
+  </div>
+</div>
+
+<input type="file" id="filePicker" accept=".html,.htm,.txt,.md,text/html,text/plain" hidden>
+<div id="toasts" aria-live="polite"></div>
+
+<script crossorigin src="react.production.min.js"></script>
+<script crossorigin src="react-dom.production.min.js"></script>
+<script src="isolated-block-editor.js"></script>
+<script>
+  (function(){
+  "use strict";
+  var LS_KEY = "mac-gutenberg-editor:v1";
+  var ta = document.getElementById("source");
+  var wrap = document.getElementById("editorWrap");
+  var titleEl = document.getElementById("docTitle");
+  var sheet = document.getElementById("sheet");
+  var saveDot = document.getElementById("saveDot");
+  var saveLabel = document.getElementById("saveLabel");
+  var saveState = document.getElementById("saveState");
+  var wordEls = [document.getElementById("wordCount"), document.getElementById("wordCountTop")];
+  var hasEditor = !!(window.wp && window.wp.attachEditor);
+  var lastValue = "", lastSavedSnapshot = "", saveTimer = null, showWords = true;
+
+  function toast(msg, type){
+    var box = document.getElementById("toasts");
+    var el = document.createElement("div");
+    el.className = "toast" + (type ? " " + type : "");
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 3200);
+  }
+
+  function countWords(t){ t = t.trim(); return t ? t.split(/\s+/).length : 0; }
+  function docIsEmpty(){ return countWords(ta.value || "") === 0 && titleEl.value.trim() === ""; }
+
+  function mount(){
+    if (!hasEditor){
+      ta.style.display = "block"; ta.style.width = "100%"; ta.style.minHeight = "280px";
+      wrap.classList.remove("loading");
+      toast("Editor de blocos indisponível — modo de texto simples ativo.", "error");
+      return;
+    }
+    var ed = ta.nextSibling;
+    if (!(ed && ed.classList && ed.classList.contains("editor"))) wp.attachEditor(ta);
+    wrap.classList.remove("loading");
+  }
+  function remount(value){
+    if (!hasEditor){ ta.value = value; onChange(true); return; }
+    var ed = ta.nextSibling;
+    if (ed && ed.classList && ed.classList.contains("editor")) wp.detachEditor(ta);
+    ta.value = value;
+    wp.attachEditor(ta);
+  }
+  function currentEditable(){
+    return document.querySelector(".editor .block-editor-rich-text__editable[contenteditable='true']") || document.querySelector(".editor [contenteditable='true']");
+  }
+
+  function restoreSelection(){
+    var el = currentEditable();
+    if (el){ el.focus(); return true; }
+    return false;
+  }
+
+  function sendKeys(key, opts){
+    var el = currentEditable();
+    if (!el){ toast("Clique no editor antes de usar este comando.", "error"); return false; }
+    el.focus();
+    var ok = true;
+    try { var evt = new KeyboardEvent("keydown", Object.assign({key:key, bubbles:true, cancelable:true}, opts||{})); el.dispatchEvent(evt); } catch(e){ ok = false; }
+    return ok;
+  }
+
+  function cmd(command, value){
+    restoreSelection();
+    var ok = false;
+    try { ok = document.execCommand(command, false, value == null ? null : value); } catch(e){ ok = false; }
+    return ok;
+  }
+
+  function wrapInline(tag){
+    restoreSelection();
+    var s = document.getSelection();
+    if (!s || !s.rangeCount || s.isCollapsed){ toast("Selecione texto.", "error"); return; }
+    var r = s.getRangeAt(0);
+    var el = document.createElement(tag);
+    try { r.surroundContents(el); } catch(e){ el.appendChild(r.extractContents()); r.insertNode(el); }
+    s.removeAllRanges();
+    toast("Formatado.", "success");
+  }
+
+  function formatBlock(tag){
+    restoreSelection();
+    var ok = cmd("formatBlock", "<" + tag + ">");
+    if (!ok) ok = cmd("formatBlock", tag);
+    toast(ok ? "Bloco convertido." : "Falha.", ok ? "success" : "error");
+  }
+
+  var actions = {
+    "new": function(){ if (!docIsEmpty() && !confirm("Criar novo documento?")) return; titleEl.value = ""; remount(""); lastSavedSnapshot = ""; onChange(true); toast("Novo documento.", "success"); },
+    "open": function(){ document.getElementById("filePicker").click(); },
+    "export": exportDoc,
+    "print": function(){ window.print(); },
+    "clear": function(){ if (docIsEmpty()) return; if (!confirm("Limpar?")) return; titleEl.value = ""; remount(""); onChange(true); toast("Limpo.", "success"); },
+    "undo": function(){ var el = currentEditable(); if (!el){ toast("Clique no editor.", "error"); return; } el.focus(); try { document.execCommand("undo"); } catch(e){} sendKeys("z", {ctrlKey:true}); toast("Desfeito.", "success"); },
+    "redo": function(){ var el = currentEditable(); if (!el){ toast("Clique no editor.", "error"); return; } el.focus(); try { document.execCommand("redo"); } catch(e){} sendKeys("Z", {ctrlKey:true, shiftKey:true}); toast("Refeito.", "success"); },
+    "bold": function(){ var ok = cmd("bold"); toast(ok ? "Negrito." : "Selecione texto.", ok ? "success" : "error"); },
+    "italic": function(){ var ok = cmd("italic"); toast(ok ? "Itálico." : "Selecione texto.", ok ? "success" : "error"); },
+    "h1": function(){ formatBlock("h1"); },
+    "h2": function(){ formatBlock("h2"); },
+    "p": function(){ formatBlock("p"); },
+    "quote": function(){ formatBlock("blockquote"); },
+    "ul": function(){ var ok = cmd("insertUnorderedList"); toast(ok ? "Lista." : "Posicione cursor.", ok ? "success" : "error"); },
+    "ol": function(){ var ok = cmd("insertOrderedList"); toast(ok ? "Lista numerada." : "Posicione cursor.", ok ? "success" : "error"); },
+    "link": function(){ restoreSelection(); var url = prompt("URL:", "https://"); if (!url) return; var ok = cmd("createLink", url); toast(ok ? "Link." : "Selecione texto.", ok ? "success" : "error"); },
+    "unformat": function(){ var ok = cmd("removeFormat"); toast(ok ? "Removido." : "Nada.", ok ? "success" : "error"); },
+    "youtube": function(){ var url = prompt("URL do YouTube:", "https://www.youtube.com/watch?v="); if (url == null) return; var id = url.match(/(?:youtube\.com\/watch\?[^#]*v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/i); if (!id){ toast("URL inválida.", "error"); return; } var embed = '<!-- wp:embed {"url":"https://www.youtube.com/watch?v=' + id[1] + '","type":"video"} --><figure><div class="wp-block-embed__wrapper"><iframe src="https://www.youtube-nocookie.com/embed/' + id[1] + '" width="560" height="315" frameborder="0" allowfullscreen></iframe></div></figure><!-- /wp:embed -->'; var cur = String(ta.value || "").trim(); remount((cur ? cur + "\n\n" : "") + embed); onChange(true); toast("Vídeo inserido.", "success"); },
+    "preview": function(){ openWindow("previewOverlay"); document.getElementById("previewFrame").srcdoc = buildExportHTML(); },
+    "focus": function(){ var on = document.documentElement.dataset.focus === "on"; document.documentElement.dataset.focus = on ? "" : "on"; toast(on ? "Foco off." : "Foco on.", "success"); },
+    "words": function(){ showWords = !showWords; document.getElementById("statusbar").style.display = showWords ? "" : "none"; document.getElementById("wordCountTop").style.display = showWords ? "" : "none"; },
+    "about": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Sobre"; document.getElementById("infoBody").innerHTML = "<p><b>Leaditor</b> — editor baseado no Gutenberg.</p><p>GPL-2.0-or-later · Leafole Labs</p>"; },
+    "licenses": function(){ openWindow("licenseOverlay"); document.getElementById("licenseBody").innerHTML = "<h2>Leaditor</h2><p>Leafole Labs · GPL-2.0-or-later</p><h3>Terceiros</h3><p>Isolated Block Editor (GPL) · React (MIT) · React DOM (MIT)</p>"; },
+    "guide": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Guia rápido"; document.getElementById("infoBody").innerHTML = "<ol><li>Edite o título no topo.</li><li>Escreva nos blocos; pressione Enter para novo parágrafo.</li><li>Use Formatar para negrito, itálico, listas e links.</li><li>Cole links de vídeo diretamente.</li><li>Arquivo → Exportar HTML gera arquivo autossuficiente.</li><li>Arquivo → Salvar rascunho guarda no navegador.</li></ol>"; },
+    "shortcuts": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Atalhos"; document.getElementById("infoBody").innerHTML = "<table><tr><td>Ctrl+N</td><td>Novo</td></tr><tr><td>Ctrl+O</td><td>Abrir</td></tr><tr><td>Ctrl+S</td><td>Salvar</td></tr><tr><td>Ctrl+E</td><td>Exportar</td></tr><tr><td>Ctrl+P</td><td>Imprimir</td></tr><tr><td>Ctrl+Z</td><td>Desfazer</td></tr></table>"; }
+  };
+
+  document.querySelectorAll("[data-action]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var a = btn.getAttribute("data-action");
+      closeMenus();
+      if (btn.disabled) return;
+      if (actions[a]) actions[a]();
+    });
+  });
+
+  function buildExportHTML(){
+    var title = titleEl.value.trim() || "Documento";
+    var body = ta.value || "<p><br></p>";
+    var css = [
+      "body{margin:0;background:#fff;color:#1d1d1f;font-family:sans-serif}",
+      ".page{max-width:760px;margin:40px auto;padding:56px 60px;background:#fff;border-radius:12px}"
+    ].join("\n");
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title><style>' + css + '</style></head><body><main class="page">' + body + '</main></body></html>';
+  }
+
+  function exportDoc(){
+    try {
+      var html = buildExportHTML();
+      var blob = new Blob([html], {type: "text/html"});
+      var a = document.createElement("a");
+      var name = (titleEl.value.trim() || "documento") + ".html";
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      toast("Exportado: " + name, "success");
+    } catch(e){ toast("Falha: " + e.message, "error"); }
+  }
+
+  function persist(manual){
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({title: titleEl.value, content: ta.value, ts: Date.now()}));
+      saveDot.classList.remove("dirty");
+      saveLabel.textContent = "Pronto";
+      saveState.textContent = "Nenhuma alteração";
+      if (manual) toast("Salvo.", "success");
+    } catch(e){ if (manual) toast("Erro ao salvar.", "error"); }
+  }
+
+  function onChange(force){
+    var v = ta.value;
+    if (v === lastValue && !force) return;
+    lastValue = v;
+    var words = countWords(v);
+    wordEls.forEach(function(el){ if (el) el.textContent = words + (words === 1 ? " palavra" : " palavras"); });
+    saveDot.classList.add("dirty");
+    saveLabel.textContent = "Não salvo";
+    saveState.textContent = "Alterações não salvas";
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){ persist(false); }, 2000);
+  }
+
+  function closeMenus(){
+    document.querySelectorAll(".menu.open").forEach(function(m){
+      m.classList.remove("open");
+      m.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
+    });
+  }
+
+  document.querySelectorAll(".menu-btn").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var menu = btn.closest(".menu");
+      var was = menu.classList.contains("open");
+      closeMenus();
+      if (!was){ menu.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
+    });
+  });
+
+  document.addEventListener("click", function(e){
+    if (!e.target.closest || !e.target.closest(".menu")) closeMenus();
+  });
+
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape"){ closeMenus(); }
+  });
+
+  document.getElementById("filePicker").addEventListener("change", function(e){
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      try {
+        var text = String(rd.result || "");
+        var title = f.name.replace(/\.[^.]+$/, "");
+        if (/<html[\s>]/i.test(text)){
+          var doc = new DOMParser().parseFromString(text, "text/html");
+          doc.querySelectorAll("script,style[data-apagar]").forEach(function(n){ n.remove(); });
+          var main = doc.querySelector("main") || doc.body;
+          text = main ? main.innerHTML : text;
+          var t = doc.querySelector("title");
+          if (t && t.textContent.trim()) title = t.textContent.trim();
+        }
+        titleEl.value = title;
+        remount(text);
+        onChange(true);
+        toast("Arquivo aberto: " + f.name, "success");
+      } catch(err){ toast("Falha ao abrir: " + err.message, "error"); }
+      e.target.value = "";
+    };
+    rd.readAsText(f);
+  });
+
+  titleEl.addEventListener("input", function(){ onChange(true); });
+  ta.addEventListener("input", function(){ onChange(); });
+
+  function refreshChecks(){
+    function mark(a,on){ document.querySelectorAll("[data-action='"+a+"']").forEach(function(b){ b.setAttribute("aria-checked", on ? "true" : "false"); }); }
+    var dark = document.documentElement.dataset.theme === "dark";
+    mark("themeLight", !dark); mark("themeDark", dark);
+    mark("wNarrow", sheet ? sheet.dataset.width === "narrow" : false);
+    mark("wNormal", sheet ? sheet.dataset.width === "normal" : false);
+    mark("wWide", sheet ? sheet.dataset.width === "wide" : false);
+    mark("focus", document.documentElement.dataset.focus === "on");
+    mark("words", showWords);
+  }
+  var winZ=410,winCount=0;
+  function frontWindow(){ var top=null,z=-1; document.querySelectorAll(".overlay.open .modal").forEach(function(m){ var mz=parseInt(m.style.zIndex||"0",10); if(mz>=z){z=mz;top=m;} }); return top; }
+  function openWindow(id){ var ov=document.getElementById(id); var m=ov.querySelector(".modal"); m.classList.remove("maximized","minimized"); m.style.position="";m.style.left="";m.style.top="";m.style.margin=""; m.style.transform="translate("+((winCount%4)*30)+"px,"+((winCount%4)*22)+"px)"; winCount++; m.style.zIndex=String(++winZ); ov.classList.add("open"); }
+  function closeWindow(m){ m.closest(".overlay").classList.remove("open"); }
+  function showInfo(title, html){ document.getElementById("infoTitle").textContent=title; document.getElementById("infoBody").innerHTML=html; openWindow("infoOverlay"); }
+
+  document.querySelectorAll(".modal").forEach(function(m){
+    var head = m.querySelector("header");
+    m.addEventListener("pointerdown", function(){ m.style.zIndex = String(++winZ); });
+    m.querySelectorAll("[data-win]").forEach(function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        var op = b.getAttribute("data-win");
+        if (op === "close") closeWindow(m);
+        else if (op === "min") m.classList.toggle("minimized");
+        else if (op === "max") m.classList.toggle("maximized");
+      });
+    });
+    if (head) {
+      head.addEventListener("pointerdown", function(e){
+        if (e.target.closest("[data-win]") || m.classList.contains("maximized")) return;
+        e.preventDefault();
+        var r = m.getBoundingClientRect();
+        m.style.transform = ""; m.style.position = "fixed"; m.style.margin = "0"; m.style.left = r.left + "px"; m.style.top = r.top + "px"; m.style.width = r.width + "px"; m.style.zIndex = String(++winZ);
+        var sx = e.clientX - r.left, sy = e.clientY - r.top;
+        function move(ev){ var w = m.offsetWidth, h = m.offsetHeight; var x = Math.min(Math.max(ev.clientX - sx, 8 - w), window.innerWidth - 40); var y = Math.min(Math.max(ev.clientY - sy, 0), window.innerHeight - 40); m.style.left = x + "px"; m.style.top = y + "px"; }
+        function up(){ document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); }
+        document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+      });
+    }
+  });
+
+  (function boot(){
+    try { var restored = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (restored && restored.content){ titleEl.value = restored.title || ""; ta.value = restored.content || ""; lastSavedSnapshot = ta.value + "§" + titleEl.value; setTimeout(function(){ toast("Rascunho restaurado.", "success"); }, 600); } else { titleEl.value = ""; ta.value = "<h1>Bem-vindo</h1><p>Escreva aqui.</p>"; } } catch(e){}
+    lastValue = ta.value;
+    mount();
+    refreshChecks();
+    onChange(true);
+    setInterval(function(){
+      if (!wrap.classList.contains("loading") && hasEditor){
+        var ed = ta.nextSibling;
+        if (!(ed && ed.classList && ed.classList.contains("editor"))){ try { mount(); } catch(e){} }
+      }
+    }, 800);
+  })();
+})();
+
+</script>
+
+</body>
+</html>
