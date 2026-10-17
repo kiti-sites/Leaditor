@@ -17,3 +17,4 @@ Abra `index.html` diretamente no navegador (não precisa de servidor). Todo o pr
 ## Licença
 
 GPL-2.0-or-later — Leafole Labs.
+Outras licenças em THIRD_PARTY_NOTICES.md
