@@ -1,17 +1,12 @@
 # Avisos de Terceiros
 
-## Isolated Block Editor
-- Autor: Automattic
-- Licença: GPL-2.0-or-later
-- Arquivo: `isolated-block-editor.js`
-- Nota: Nenhum código foi substituído.
+## Editor.js
+- Autor: CodeX Team (Editor.js)
+- Licença: Apache-2.0
+- Arquivo: `editorjs/editorjs.umd.js`
+- Nota: Editor.js é open source licenciado sob a Apache License 2.0.
 
-## React
-- Autor: Facebook, Inc. e afiliados
+## Plugins do Editor.js
+- Autor: CodeX Team
 - Licença: MIT
-- Arquivo: `react.production.min.js`
-
-## React DOM
-- Autor: Facebook, Inc. e afiliados
-- Licença: MIT
-- Arquivo: `react-dom.production.min.js`
+- Arquivos: `editorjs/header.umd.js`, `editorjs/list.umd.js`, `editorjs/code.umd.js`, `editorjs/quote.umd.js`, `editorjs/delimiter.umd.js`

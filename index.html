@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Editor de Texto</title>
 <link rel="stylesheet" href="core.css">
-<link rel="stylesheet" href="isolated-block-editor.css">
 <style>
 :root{--bg:#f5f5f7;--chrome:rgba(246,246,248,.86);--chrome-border:#d9d9de;--text:#1d1d1f;--muted:#6e6e73;--accent:#0a84ff;--sheet:#ffffff;--sheet-border:#e3e3e8;--shadow:0 8px 30px rgba(0,0,0,.08);--menu-bg:rgba(255,255,255,.98);--hover:#e8e8ed;--radius:10px;--danger:#ff5f57;--warn:#febc2e;--ok:#28c840;}
 html[data-theme="dark"]{--bg:#1e1e20;--chrome:rgba(38,38,40,.9);--chrome-border:#454548;--text:#f5f5f7;--muted:#a1a1a6;--accent:#0a84ff;--sheet:#ffffff;--sheet-border:#e3e3e8;--menu-bg:rgba(44,44,46,.98);--hover:#3a3a3c;--shadow:0 8px 30px rgba(0,0,0,.45);}
@@ -54,6 +53,27 @@ html[data-focus="on"] #toolbar .group.left, html[data-focus="on"] #statusbar{dis
 #editorWrap{position:relative;min-height:300px}
 #editorWrap.loading::after{content:"A carregar editor…";position:absolute;inset:40px 0 0;text-align:center;color:#8e8e93;font-size:14px;animation:pulse 1.2s ease-in-out infinite;}
 @keyframes pulse{50%{opacity:.4}}
+/* Contêiner do Editor.js: largura confortável e padding interno seguro */
+#editorjs {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 2rem 2.5rem;
+  min-height: 400px;
+}
+/* Sobrescreve as larguras padrão internas do Editor.js */
+.codex-editor__redactor {
+  padding-bottom: 100px !important;
+  margin-right: 0 !important;
+}
+/* Garante que os blocos ocupem 100% da largura do contêiner */
+.ce-block__content {
+  max-width: 100% !important;
+  margin: 0 auto;
+}
+/* Garante que a barra de ferramentas alinhe corretamente com os blocos */
+.ce-toolbar__content {
+  max-width: 100% !important;
+}
 #source{display:none}
 .iso-editor [data-block-type="core/social-link"], .iso-editor [data-block-type="core/social-links"],
 .iso-editor .wp-block-social-link, .iso-editor .wp-block-social-links,
@@ -202,7 +222,7 @@ html[data-focus="on"] #toolbar .group.left, html[data-focus="on"] #statusbar{dis
   <article id="sheet" data-width="normal">
     <input id="docTitle" type="text" placeholder="Título do documento" maxlength="160" aria-label="Título do documento"> <br><br>
     <div id="editorWrap" class="loading">
-      <textarea id="source" rows="10" aria-hidden="true" tabindex="-1"></textarea>
+      <div id="editorjs"></div>
     </div>
   </article>
   <footer id="statusbar">
@@ -230,7 +250,7 @@ html[data-focus="on"] #toolbar .group.left, html[data-focus="on"] #statusbar{dis
 
 <div class="overlay" id="licenseOverlay">
   <div class="modal">
-    <header><span class="win-lights"><button class="r" data-win="close" title="Fechar" aria-label="Fechar"></button><button class="y" data-win="min" title="Minimizar" aria-label="Minimizar"></button><button class="g" data-win="max" title="Maximizar" aria-label="Maximizar"></button></span><span class="wtitle">Licenças</span></header>
+    <header><span class="win-lights"><button class="r" data-win="close" title="Fechar" aria-label="Fechar"></button><button class="y" data-win="min" title="Minimizar" aria-label="Minimizar"></button><button class="g" data-win="max" title="Maximizar" aria-label="Maximizar"></button></span><span class="wtitle" id="licenseTitle">Licenças</span></header>
     <div class="body" id="licenseBody"></div>
   </div>
 </div>
@@ -238,293 +258,419 @@ html[data-focus="on"] #toolbar .group.left, html[data-focus="on"] #statusbar{dis
 <input type="file" id="filePicker" accept=".html,.htm,.txt,.md,text/html,text/plain" hidden>
 <div id="toasts" aria-live="polite"></div>
 
-<script crossorigin src="react.production.min.js"></script>
-<script crossorigin src="react-dom.production.min.js"></script>
-<script src="isolated-block-editor.js"></script>
+<script src="editorjs/editorjs.umd.js"></script>
+<script src="editorjs/header.umd.js"></script>
+<script src="editorjs/list.umd.js"></script>
+<script src="editorjs/code.umd.js"></script>
+<script src="editorjs/quote.umd.js"></script>
+<script src="editorjs/delimiter.umd.js"></script>
 <script>
   (function(){
-  "use strict";
-  var LS_KEY = "mac-gutenberg-editor:v1";
-  var ta = document.getElementById("source");
-  var wrap = document.getElementById("editorWrap");
-  var titleEl = document.getElementById("docTitle");
-  var sheet = document.getElementById("sheet");
-  var saveDot = document.getElementById("saveDot");
-  var saveLabel = document.getElementById("saveLabel");
-  var saveState = document.getElementById("saveState");
-  var wordEls = [document.getElementById("wordCount"), document.getElementById("wordCountTop")];
-  var hasEditor = !!(window.wp && window.wp.attachEditor);
-  var lastValue = "", lastSavedSnapshot = "", saveTimer = null, showWords = true;
+    "use strict";
+    var LS_KEY = "leaditor-editorjs:v1";
+    var titleEl = document.getElementById("docTitle");
+    var sheet = document.getElementById("sheet");
+    var saveDot = document.getElementById("saveDot");
+    var saveLabel = document.getElementById("saveLabel");
+    var saveState = document.getElementById("saveState");
+    var wordEls = [document.getElementById("wordCount"), document.getElementById("wordCountTop")];
+    var editorWrap = document.getElementById("editorWrap");
+    var holder = document.getElementById("editorjs");
+    var filePicker = document.getElementById("filePicker");
 
-  function toast(msg, type){
-    var box = document.getElementById("toasts");
-    var el = document.createElement("div");
-    el.className = "toast" + (type ? " " + type : "");
-    el.textContent = msg;
-    box.appendChild(el);
-    setTimeout(function(){ el.remove(); }, 3200);
-  }
+    var editor = null;
+    var editorReady = false;
+    var saveTimer = null;
+    var showWords = true;
 
-  function countWords(t){ t = t.trim(); return t ? t.split(/\s+/).length : 0; }
-  function docIsEmpty(){ return countWords(ta.value || "") === 0 && titleEl.value.trim() === ""; }
-
-  function mount(){
-    if (!hasEditor){
-      ta.style.display = "block"; ta.style.width = "100%"; ta.style.minHeight = "280px";
-      wrap.classList.remove("loading");
-      toast("Editor de blocos indisponível — modo de texto simples ativo.", "error");
-      return;
+    function toast(msg, type){
+      var box = document.getElementById("toasts");
+      var el = document.createElement("div");
+      el.className = "toast" + (type ? " " + type : "");
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(function(){ el.remove(); }, 3200);
     }
-    var ed = ta.nextSibling;
-    if (!(ed && ed.classList && ed.classList.contains("editor"))) wp.attachEditor(ta);
-    wrap.classList.remove("loading");
-  }
-  function remount(value){
-    if (!hasEditor){ ta.value = value; onChange(true); return; }
-    var ed = ta.nextSibling;
-    if (ed && ed.classList && ed.classList.contains("editor")) wp.detachEditor(ta);
-    ta.value = value;
-    wp.attachEditor(ta);
-  }
-  function currentEditable(){
-    return document.querySelector(".editor .block-editor-rich-text__editable[contenteditable='true']") || document.querySelector(".editor [contenteditable='true']");
-  }
 
-  function restoreSelection(){
-    var el = currentEditable();
-    if (el){ el.focus(); return true; }
-    return false;
-  }
-
-  function sendKeys(key, opts){
-    var el = currentEditable();
-    if (!el){ toast("Clique no editor antes de usar este comando.", "error"); return false; }
-    el.focus();
-    var ok = true;
-    try { var evt = new KeyboardEvent("keydown", Object.assign({key:key, bubbles:true, cancelable:true}, opts||{})); el.dispatchEvent(evt); } catch(e){ ok = false; }
-    return ok;
-  }
-
-  function cmd(command, value){
-    restoreSelection();
-    var ok = false;
-    try { ok = document.execCommand(command, false, value == null ? null : value); } catch(e){ ok = false; }
-    return ok;
-  }
-
-  function wrapInline(tag){
-    restoreSelection();
-    var s = document.getSelection();
-    if (!s || !s.rangeCount || s.isCollapsed){ toast("Selecione texto.", "error"); return; }
-    var r = s.getRangeAt(0);
-    var el = document.createElement(tag);
-    try { r.surroundContents(el); } catch(e){ el.appendChild(r.extractContents()); r.insertNode(el); }
-    s.removeAllRanges();
-    toast("Formatado.", "success");
-  }
-
-  function formatBlock(tag){
-    restoreSelection();
-    var ok = cmd("formatBlock", "<" + tag + ">");
-    if (!ok) ok = cmd("formatBlock", tag);
-    toast(ok ? "Bloco convertido." : "Falha.", ok ? "success" : "error");
-  }
-
-  var actions = {
-    "new": function(){ if (!docIsEmpty() && !confirm("Criar novo documento?")) return; titleEl.value = ""; remount(""); lastSavedSnapshot = ""; onChange(true); toast("Novo documento.", "success"); },
-    "open": function(){ document.getElementById("filePicker").click(); },
-    "export": exportDoc,
-    "print": function(){ window.print(); },
-    "clear": function(){ if (docIsEmpty()) return; if (!confirm("Limpar?")) return; titleEl.value = ""; remount(""); onChange(true); toast("Limpo.", "success"); },
-    "undo": function(){ var el = currentEditable(); if (!el){ toast("Clique no editor.", "error"); return; } el.focus(); try { document.execCommand("undo"); } catch(e){} sendKeys("z", {ctrlKey:true}); toast("Desfeito.", "success"); },
-    "redo": function(){ var el = currentEditable(); if (!el){ toast("Clique no editor.", "error"); return; } el.focus(); try { document.execCommand("redo"); } catch(e){} sendKeys("Z", {ctrlKey:true, shiftKey:true}); toast("Refeito.", "success"); },
-    "bold": function(){ var ok = cmd("bold"); toast(ok ? "Negrito." : "Selecione texto.", ok ? "success" : "error"); },
-    "italic": function(){ var ok = cmd("italic"); toast(ok ? "Itálico." : "Selecione texto.", ok ? "success" : "error"); },
-    "h1": function(){ formatBlock("h1"); },
-    "h2": function(){ formatBlock("h2"); },
-    "p": function(){ formatBlock("p"); },
-    "quote": function(){ formatBlock("blockquote"); },
-    "ul": function(){ var ok = cmd("insertUnorderedList"); toast(ok ? "Lista." : "Posicione cursor.", ok ? "success" : "error"); },
-    "ol": function(){ var ok = cmd("insertOrderedList"); toast(ok ? "Lista numerada." : "Posicione cursor.", ok ? "success" : "error"); },
-    "link": function(){ restoreSelection(); var url = prompt("URL:", "https://"); if (!url) return; var ok = cmd("createLink", url); toast(ok ? "Link." : "Selecione texto.", ok ? "success" : "error"); },
-    "unformat": function(){ var ok = cmd("removeFormat"); toast(ok ? "Removido." : "Nada.", ok ? "success" : "error"); },
-    "youtube": function(){ var url = prompt("URL do YouTube:", "https://www.youtube.com/watch?v="); if (url == null) return; var id = url.match(/(?:youtube\.com\/watch\?[^#]*v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/i); if (!id){ toast("URL inválida.", "error"); return; } var embed = '<!-- wp:embed {"url":"https://www.youtube.com/watch?v=' + id[1] + '","type":"video"} --><figure><div class="wp-block-embed__wrapper"><iframe src="https://www.youtube-nocookie.com/embed/' + id[1] + '" width="560" height="315" frameborder="0" allowfullscreen></iframe></div></figure><!-- /wp:embed -->'; var cur = String(ta.value || "").trim(); remount((cur ? cur + "\n\n" : "") + embed); onChange(true); toast("Vídeo inserido.", "success"); },
-    "preview": function(){ openWindow("previewOverlay"); document.getElementById("previewFrame").srcdoc = buildExportHTML(); },
-    "focus": function(){ var on = document.documentElement.dataset.focus === "on"; document.documentElement.dataset.focus = on ? "" : "on"; toast(on ? "Foco off." : "Foco on.", "success"); },
-    "words": function(){ showWords = !showWords; document.getElementById("statusbar").style.display = showWords ? "" : "none"; document.getElementById("wordCountTop").style.display = showWords ? "" : "none"; },
-    "about": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Sobre"; document.getElementById("infoBody").innerHTML = "<p><b>Leaditor</b> — editor baseado no Gutenberg.</p><p>GPL-2.0-or-later · Leafole Labs</p>"; },
-    "licenses": function(){ openWindow("licenseOverlay"); document.getElementById("licenseBody").innerHTML = "<h2>Leaditor</h2><p>Leafole Labs · GPL-2.0-or-later</p><h3>Terceiros</h3><p>Isolated Block Editor (GPL) · React (MIT) · React DOM (MIT)</p>"; },
-    "guide": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Guia rápido"; document.getElementById("infoBody").innerHTML = "<ol><li>Edite o título no topo.</li><li>Escreva nos blocos; pressione Enter para novo parágrafo.</li><li>Use Formatar para negrito, itálico, listas e links.</li><li>Cole links de vídeo diretamente.</li><li>Arquivo → Exportar HTML gera arquivo autossuficiente.</li><li>Arquivo → Salvar rascunho guarda no navegador.</li></ol>"; },
-    "shortcuts": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Atalhos"; document.getElementById("infoBody").innerHTML = "<table><tr><td>Ctrl+N</td><td>Novo</td></tr><tr><td>Ctrl+O</td><td>Abrir</td></tr><tr><td>Ctrl+S</td><td>Salvar</td></tr><tr><td>Ctrl+E</td><td>Exportar</td></tr><tr><td>Ctrl+P</td><td>Imprimir</td></tr><tr><td>Ctrl+Z</td><td>Desfazer</td></tr></table>"; }
-  };
-
-  document.querySelectorAll("[data-action]").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      var a = btn.getAttribute("data-action");
-      closeMenus();
-      if (btn.disabled) return;
-      if (actions[a]) actions[a]();
-    });
-  });
-
-  function buildExportHTML(){
-    var title = titleEl.value.trim() || "Documento";
-    var body = ta.value || "<p><br></p>";
-    var css = [
-      "body{margin:0;background:#fff;color:#1d1d1f;font-family:sans-serif}",
-      ".page{max-width:760px;margin:40px auto;padding:56px 60px;background:#fff;border-radius:12px}"
-    ].join("\n");
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title><style>' + css + '</style></head><body><main class="page">' + body + '</main></body></html>';
-  }
-
-  function exportDoc(){
-    try {
-      var html = buildExportHTML();
-      var blob = new Blob([html], {type: "text/html"});
-      var a = document.createElement("a");
-      var name = (titleEl.value.trim() || "documento") + ".html";
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      document.body.appendChild(a); a.click();
-      setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
-      toast("Exportado: " + name, "success");
-    } catch(e){ toast("Falha: " + e.message, "error"); }
-  }
-
-  function persist(manual){
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify({title: titleEl.value, content: ta.value, ts: Date.now()}));
-      saveDot.classList.remove("dirty");
-      saveLabel.textContent = "Pronto";
-      saveState.textContent = "Nenhuma alteração";
-      if (manual) toast("Salvo.", "success");
-    } catch(e){ if (manual) toast("Erro ao salvar.", "error"); }
-  }
-
-  function onChange(force){
-    var v = ta.value;
-    if (v === lastValue && !force) return;
-    lastValue = v;
-    var words = countWords(v);
-    wordEls.forEach(function(el){ if (el) el.textContent = words + (words === 1 ? " palavra" : " palavras"); });
-    saveDot.classList.add("dirty");
-    saveLabel.textContent = "Não salvo";
-    saveState.textContent = "Alterações não salvas";
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function(){ persist(false); }, 2000);
-  }
-
-  function closeMenus(){
-    document.querySelectorAll(".menu.open").forEach(function(m){
-      m.classList.remove("open");
-      m.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
-    });
-  }
-
-  document.querySelectorAll(".menu-btn").forEach(function(btn){
-    btn.addEventListener("click", function(e){
-      e.stopPropagation();
-      var menu = btn.closest(".menu");
-      var was = menu.classList.contains("open");
-      closeMenus();
-      if (!was){ menu.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
-    });
-  });
-
-  document.addEventListener("click", function(e){
-    if (!e.target.closest || !e.target.closest(".menu")) closeMenus();
-  });
-
-  document.addEventListener("keydown", function(e){
-    if (e.key === "Escape"){ closeMenus(); }
-  });
-
-  document.getElementById("filePicker").addEventListener("change", function(e){
-    var f = e.target.files && e.target.files[0];
-    if (!f) return;
-    var rd = new FileReader();
-    rd.onload = function(){
-      try {
-        var text = String(rd.result || "");
-        var title = f.name.replace(/\.[^.]+$/, "");
-        if (/<html[\s>]/i.test(text)){
-          var doc = new DOMParser().parseFromString(text, "text/html");
-          doc.querySelectorAll("script,style[data-apagar]").forEach(function(n){ n.remove(); });
-          var main = doc.querySelector("main") || doc.body;
-          text = main ? main.innerHTML : text;
-          var t = doc.querySelector("title");
-          if (t && t.textContent.trim()) title = t.textContent.trim();
-        }
-        titleEl.value = title;
-        remount(text);
-        onChange(true);
-        toast("Arquivo aberto: " + f.name, "success");
-      } catch(err){ toast("Falha ao abrir: " + err.message, "error"); }
-      e.target.value = "";
-    };
-    rd.readAsText(f);
-  });
-
-  titleEl.addEventListener("input", function(){ onChange(true); });
-  ta.addEventListener("input", function(){ onChange(); });
-
-  function refreshChecks(){
-    function mark(a,on){ document.querySelectorAll("[data-action='"+a+"']").forEach(function(b){ b.setAttribute("aria-checked", on ? "true" : "false"); }); }
-    var dark = document.documentElement.dataset.theme === "dark";
-    mark("themeLight", !dark); mark("themeDark", dark);
-    mark("wNarrow", sheet ? sheet.dataset.width === "narrow" : false);
-    mark("wNormal", sheet ? sheet.dataset.width === "normal" : false);
-    mark("wWide", sheet ? sheet.dataset.width === "wide" : false);
-    mark("focus", document.documentElement.dataset.focus === "on");
-    mark("words", showWords);
-  }
-  var winZ=410,winCount=0;
-  function frontWindow(){ var top=null,z=-1; document.querySelectorAll(".overlay.open .modal").forEach(function(m){ var mz=parseInt(m.style.zIndex||"0",10); if(mz>=z){z=mz;top=m;} }); return top; }
-  function openWindow(id){ var ov=document.getElementById(id); var m=ov.querySelector(".modal"); m.classList.remove("maximized","minimized"); m.style.position="";m.style.left="";m.style.top="";m.style.margin=""; m.style.transform="translate("+((winCount%4)*30)+"px,"+((winCount%4)*22)+"px)"; winCount++; m.style.zIndex=String(++winZ); ov.classList.add("open"); }
-  function closeWindow(m){ m.closest(".overlay").classList.remove("open"); }
-  function showInfo(title, html){ document.getElementById("infoTitle").textContent=title; document.getElementById("infoBody").innerHTML=html; openWindow("infoOverlay"); }
-
-  document.querySelectorAll(".modal").forEach(function(m){
-    var head = m.querySelector("header");
-    m.addEventListener("pointerdown", function(){ m.style.zIndex = String(++winZ); });
-    m.querySelectorAll("[data-win]").forEach(function(b){
-      b.addEventListener("click", function(e){
-        e.stopPropagation();
-        var op = b.getAttribute("data-win");
-        if (op === "close") closeWindow(m);
-        else if (op === "min") m.classList.toggle("minimized");
-        else if (op === "max") m.classList.toggle("maximized");
-      });
-    });
-    if (head) {
-      head.addEventListener("pointerdown", function(e){
-        if (e.target.closest("[data-win]") || m.classList.contains("maximized")) return;
-        e.preventDefault();
-        var r = m.getBoundingClientRect();
-        m.style.transform = ""; m.style.position = "fixed"; m.style.margin = "0"; m.style.left = r.left + "px"; m.style.top = r.top + "px"; m.style.width = r.width + "px"; m.style.zIndex = String(++winZ);
-        var sx = e.clientX - r.left, sy = e.clientY - r.top;
-        function move(ev){ var w = m.offsetWidth, h = m.offsetHeight; var x = Math.min(Math.max(ev.clientX - sx, 8 - w), window.innerWidth - 40); var y = Math.min(Math.max(ev.clientY - sy, 0), window.innerHeight - 40); m.style.left = x + "px"; m.style.top = y + "px"; }
-        function up(){ document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); }
-        document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
-      });
+    function countWords(text){
+      text = String(text || "").trim();
+      return text ? text.split(/\s+/).length : 0;
     }
-  });
 
-  (function boot(){
-    try { var restored = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (restored && restored.content){ titleEl.value = restored.title || ""; ta.value = restored.content || ""; lastSavedSnapshot = ta.value + "§" + titleEl.value; setTimeout(function(){ toast("Rascunho restaurado.", "success"); }, 600); } else { titleEl.value = ""; ta.value = "<h1>Bem-vindo</h1><p>Escreva aqui.</p>"; } } catch(e){}
-    lastValue = ta.value;
-    mount();
-    refreshChecks();
-    onChange(true);
-    setInterval(function(){
-      if (!wrap.classList.contains("loading") && hasEditor){
-        var ed = ta.nextSibling;
-        if (!(ed && ed.classList && ed.classList.contains("editor"))){ try { mount(); } catch(e){} }
+    function updateWords(){
+      var words = editorReady ? countWords(holder.textContent || "") : 0;
+      wordEls.forEach(function(el){ if (el) el.textContent = words + (words === 1 ? " palavra" : " palavras"); });
+    }
+
+    function markDirty(){
+      saveDot.classList.add("dirty");
+      saveLabel.textContent = "Não salvo";
+      saveState.textContent = "Alterações não salvas";
+      updateWords();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function(){ persist(false); }, 2000);
+    }
+
+    async function persist(manual){
+      if (!editor) {
+        if (manual) toast("Editor ainda não está pronto.", "error");
+        return;
       }
-    }, 800);
-  })();
-})();
+      if (!editorReady) {
+        if (manual) toast("Editor ainda não está pronto.", "error");
+        return;
+      }
+      try {
+        var data = await editor.save();
+        localStorage.setItem(LS_KEY, JSON.stringify({title: titleEl.value, blocks: data.blocks, ts: Date.now()}));
+        saveDot.classList.remove("dirty");
+        saveLabel.textContent = "Pronto";
+        saveState.textContent = "Nenhuma alteração";
+        if (manual) toast("Salvo.", "success");
+      } catch(e){
+        console.error("Erro ao salvar:", e);
+        if (manual) toast("Erro ao salvar: " + (e && e.message ? e.message : e), "error");
+      }
+    }
 
+    async function initEditor(){
+      var HeaderTool = window.Header;
+      var ListTool = window.EditorjsList || window.EditorJSList || window.List;
+      var CodeToolClass = window.CodeTool || window.EditorJSCode;
+      var QuoteTool = window.Quote || window.EditorJSQuote;
+      var DelimiterTool = window.Delimiter || window.EditorJSDelimiter;
+
+      var tools = {};
+
+      if (HeaderTool) {
+        tools.header = {
+          class: HeaderTool,
+          inlineToolbar: true,
+          config: { placeholder: 'Digite um título...', levels: [1, 2, 3], defaultLevel: 2 }
+        };
+      }
+
+      if (ListTool) {
+        tools.list = {
+          class: ListTool,
+          inlineToolbar: true
+        };
+      }
+
+      if (CodeToolClass) {
+        tools.code = {
+          class: CodeToolClass
+        };
+      }
+
+      if (QuoteTool) {
+        tools.quote = {
+          class: QuoteTool,
+          inlineToolbar: true
+        };
+      }
+
+      if (DelimiterTool) {
+        tools.delimiter = {
+          class: DelimiterTool
+        };
+      }
+
+      editor = new EditorJS({
+        holder: 'editorjs',
+        tools: tools,
+        onChange: function(){
+          markDirty();
+        },
+        onReady: async function(){
+          editorReady = true;
+          editorWrap.classList.remove("loading");
+
+          try {
+            var restored = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+            if (restored && restored.blocks && restored.blocks.length) {
+              titleEl.value = restored.title || "";
+              await editor.render({ blocks: restored.blocks });
+              setTimeout(function(){ toast("Rascunho restaurado.", "success"); }, 600);
+            } else {
+              titleEl.value = "";
+              try { await editor.blocks.insert("header", { text: "Bem-vindo", level: 2 }); } catch(e){}
+            }
+          } catch(e){
+            titleEl.value = "";
+          }
+
+          updateWords();
+        }
+      });
+    }
+
+    async function buildExportHTML(){
+      var title = titleEl.value.trim() || "Documento";
+      var body = "<p><br></p>";
+      try {
+        if (editor && editorReady) {
+          var saved = await editor.save();
+          var parts = [];
+          var blocks = (saved && saved.blocks) || [];
+          for (var i = 0; i < blocks.length; i++) {
+            var blockHTML = renderBlockHTML(blocks[i]);
+            if (blockHTML) parts.push(blockHTML);
+          }
+          body = parts.join("\n") || "<p><br></p>";
+        }
+      } catch(e) {
+        body = holder.innerHTML || "<p><br></p>";
+      }
+      var css = [
+        "body{margin:0;background:#fff;color:#1d1d1f;font-family:sans-serif}",
+        ".page{max-width:760px;margin:40px auto;padding:56px 60px;background:#fff;border-radius:12px}",
+        "h1,h2,h3{font-weight:600;line-height:1.25}",
+        "h1{font-size:2.2em}",
+        "h2{font-size:1.6em}",
+        "h3{font-size:1.3em}",
+        "p{font-size:1em;line-height:1.6;margin:0 0 1em}",
+        "ul,ol{padding-left:1.4em;margin:0 0 1em}",
+        "li{margin:0.25em 0}",
+        "blockquote{border-left:3px solid #ddd;margin:0 0 1em;padding:0.25em 1em;color:#555}",
+        "pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow:auto}",
+        "code{font-family:monospace;font-size:0.9em}",
+        "a{color:#0a84ff}",
+        "hr{border:0;border-top:1px solid #ddd;margin:1.5em 0}"
+      ].join("\n");
+      return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title><style>' + css + '</style></head><body><main class="page">' + body + '</main></body></html>';
+    }
+
+    function renderBlockHTML(block){
+      var type = block && block.type;
+      var data = (block && block.data) || {};
+      if (type === "header") {
+        var lvl = data.level || 2;
+        return "<h" + lvl + ">" + escapeHTML(data.text || "") + "</h" + lvl + ">";
+      }
+      if (type === "paragraph") {
+        return "<p>" + escapeHTML(data.text || "") + "</p>";
+      }
+      if (type === "list") {
+        var tag = data.style === "ordered" ? "ol" : "ul";
+        var items = (data.items || []).map(function(it){
+          return "<li>" + escapeHTML(it.content || "") + "</li>";
+        }).join("");
+        return "<" + tag + ">" + items + "</" + tag + ">";
+      }
+      if (type === "quote") {
+        return "<blockquote>" + escapeHTML(data.text || "") + "</blockquote>";
+      }
+      if (type === "code") {
+        return "<pre><code>" + escapeHTML(data.code || "") + "</code></pre>";
+      }
+      if (type === "delimiter") {
+        return "<hr>";
+      }
+      if (type === "image") {
+        if (data.file && data.file.url) return "<img src=\"" + escapeHTML(data.file.url) + "\" alt=\"" + escapeHTML(data.caption || "") + "\">";
+        return "";
+      }
+      if (type === "link") {
+        if (data.url) return "<p><a href=\"" + escapeHTML(data.url) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHTML(data.meta && data.meta.title || data.text || "Link") + "</a></p>";
+        return "";
+      }
+      if (type === "table") {
+        var rows = data.rows || [];
+        if (!rows.length) return "";
+        var trs = rows.map(function(row){
+          var tds = (row.cells || []).map(function(c){ return "<td>" + escapeHTML(c || "") + "</td>"; }).join("");
+          return "<tr>" + tds + "</tr>";
+        }).join("");
+        var th = (rows[0].cells || []).map(function(c){ return "<th>" + escapeHTML(c || "") + "</th>"; }).join("");
+        return "<table><thead><tr>" + th + "</tr></thead><tbody>" + trs + "</tbody></table>";
+      }
+      return "";
+    }
+
+    function escapeHTML(s){
+      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    async function exportDoc(){
+      try {
+        var html = await buildExportHTML();
+        var blob = new Blob([html], {type: "text/html"});
+        var a = document.createElement("a");
+        var name = (titleEl.value.trim() || "documento") + ".html";
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a); a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        toast("Exportado: " + name, "success");
+      } catch(e){
+        toast("Falha: " + e.message, "error");
+      }
+    }
+
+    function closeMenus(){
+      document.querySelectorAll(".menu.open").forEach(function(m){
+        m.classList.remove("open");
+        m.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
+      });
+    }
+
+    var actions = {
+      "new": async function(){
+        if (saveDot.classList.contains("dirty") && !confirm("Criar novo documento?")) return;
+        titleEl.value = "";
+        if (editorReady) await editor.clear();
+        saveDot.classList.remove("dirty");
+        saveLabel.textContent = "Pronto";
+        saveState.textContent = "Nenhuma alteração";
+        toast("Novo documento.", "success");
+        updateWords();
+      },
+      "open": function(){ filePicker.click(); },
+      "export": exportDoc,
+      "print": function(){ window.print(); },
+      "clear": async function(){
+        if (saveDot.classList.contains("dirty") && !confirm("Limpar documento?")) return;
+        titleEl.value = "";
+        if (editorReady) await editor.clear();
+        saveDot.classList.remove("dirty");
+        saveLabel.textContent = "Pronto";
+        saveState.textContent = "Nenhuma alteração";
+        toast("Limpo.", "success");
+        updateWords();
+      },
+      "undo": function(){ toast("Use o atalho do editor (Ctrl+Z).", "info"); },
+      "redo": function(){ toast("Use o atalho do editor (Ctrl+Shift+Z).", "info"); },
+      "bold": function(){ toast("Use a barra de ferramentas do editor.", "info"); },
+      "italic": function(){ toast("Use a barra de ferramentas do editor.", "info"); },
+      "strike": function(){ toast("Use a barra de ferramentas do editor.", "info"); },
+      "code": function(){ toast("Use o bloco de Código do editor.", "info"); },
+      "h1": function(){ toast("Use o bloco Título do editor.", "info"); },
+      "h2": function(){ toast("Use o bloco Título do editor.", "info"); },
+      "h3": function(){ toast("Use o bloco Título do editor.", "info"); },
+      "p": function(){ toast("Use o bloco Parágrafo do editor.", "info"); },
+      "quote": function(){ toast("Use o bloco Citação do editor.", "info"); },
+      "ul": function(){ toast("Use o bloco Lista do editor.", "info"); },
+      "ol": function(){ toast("Use o bloco Lista do editor.", "info"); },
+      "link": function(){ toast("Use o botão de link da barra de ferramentas.", "info"); },
+      "unformat": function(){ toast("Use a barra de ferramentas do editor.", "info"); },
+      "preview": function(){ openWindow("previewOverlay"); document.getElementById("previewFrame").srcdoc = buildExportHTML(); },
+      "focus": function(){ var on = document.documentElement.dataset.focus === "on"; document.documentElement.dataset.focus = on ? "" : "on"; toast(on ? "Foco off." : "Foco on.", "success"); },
+      "words": function(){ showWords = !showWords; document.getElementById("statusbar").style.display = showWords ? "" : "none"; document.getElementById("wordCountTop").style.display = showWords ? "" : "none"; },
+      "about": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Sobre"; document.getElementById("infoBody").innerHTML = "<p><b>Leaditor</b> — editor baseado no Editor.js.</p><p>Apache-2.0 · Leafole Labs</p>"; },
+      "licenses": function(){ openWindow("licenseOverlay"); document.getElementById("licenseBody").innerHTML = "<h2>Leaditor</h2><p>Leafole Labs · Apache-2.0</p><h3>Terceiros</h3><p>Editor.js (Apache-2.0) · plugins Header/List/Code/Quote/Delimiter (MIT)</p>"; },
+      "guide": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Guia rápido"; document.getElementById("infoBody").innerHTML = "<ol><li>Edite o título no topo.</li><li>Escreva nos blocos; pressione Enter para novo bloco.</li><li>Use a barra de ferramentas do editor para negrito, itálico, listas e links.</li><li>Arquivo → Exportar HTML gera arquivo autossuficiente.</li><li>Arquivo → Salvar rascunho guarda no navegador.</li></ol>"; },
+      "shortcuts": function(){ openWindow("infoOverlay"); document.getElementById("infoTitle").textContent = "Atalhos"; document.getElementById("infoBody").innerHTML = "<table><tr><td>Ctrl+N</td><td>Novo</td></tr><tr><td>Ctrl+O</td><td>Abrir</td></tr><tr><td>Ctrl+S</td><td>Salvar</td></tr><tr><td>Ctrl+E</td><td>Exportar</td></tr><tr><td>Ctrl+P</td><td>Imprimir</td></tr><tr><td>Ctrl+Z</td><td>Desfazer (editor)</td></tr></table>"; }
+    };
+
+    document.querySelectorAll("[data-action]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var a = btn.getAttribute("data-action");
+        closeMenus();
+        if (btn.disabled) return;
+        if (actions[a]) actions[a]();
+      });
+    });
+
+    function refreshChecks(){
+      function mark(a,on){ document.querySelectorAll("[data-action='"+a+"']").forEach(function(b){ b.setAttribute("aria-checked", on ? "true" : "false"); }); }
+      var dark = document.documentElement.dataset.theme === "dark";
+      mark("themeLight", !dark); mark("themeDark", dark);
+      mark("wNarrow", sheet ? sheet.dataset.width === "narrow" : false);
+      mark("wNormal", sheet ? sheet.dataset.width === "normal" : false);
+      mark("wWide", sheet ? sheet.dataset.width === "wide" : false);
+      mark("focus", document.documentElement.dataset.focus === "on");
+      mark("words", showWords);
+    }
+    var winZ=410,winCount=0;
+    function openWindow(id){
+      var ov = document.getElementById(id);
+      var m = ov.querySelector(".modal");
+      m.classList.remove("maximized","minimized");
+      m.style.position="";m.style.left="";m.style.top="";m.style.margin=""; m.style.transform="translate("+((winCount%4)*30)+"px,"+((winCount%4)*22)+"px)"; winCount++; m.style.zIndex=String(++winZ); ov.classList.add("open");
+    }
+    function closeWindow(m){ m.closest(".overlay").classList.remove("open"); }
+    function showInfo(title, html){ document.getElementById("infoTitle").textContent=title; document.getElementById("infoBody").innerHTML=html; openWindow("infoOverlay"); }
+
+    document.querySelectorAll(".modal").forEach(function(m){
+      var head = m.querySelector("header");
+      m.addEventListener("pointerdown", function(){ m.style.zIndex = String(++winZ); });
+      m.querySelectorAll("[data-win]").forEach(function(b){
+        b.addEventListener("click", function(e){
+          e.stopPropagation();
+          var op = b.getAttribute("data-win");
+          if (op === "close") closeWindow(m);
+          else if (op === "min") m.classList.toggle("minimized");
+          else if (op === "max") m.classList.toggle("maximized");
+        });
+      });
+      if (head) {
+        head.addEventListener("pointerdown", function(e){
+          if (e.target.closest("[data-win]") || m.classList.contains("maximized")) return;
+          e.preventDefault();
+          var r = m.getBoundingClientRect();
+          m.style.transform = ""; m.style.position = "fixed"; m.style.margin = "0"; m.style.left = r.left + "px"; m.style.top = r.top + "px"; m.style.width = r.width + "px"; m.style.zIndex = String(++winZ);
+          var sx = e.clientX - r.left, sy = e.clientY - r.top;
+          function move(ev){ var w = m.offsetWidth, h = m.offsetHeight; var x = Math.min(Math.max(ev.clientX - sx, 8 - w), window.innerWidth - 40); var y = Math.min(Math.max(ev.clientY - sy, 0), window.innerHeight - 40); m.style.left = x + "px"; m.style.top = y + "px"; }
+          function up(){ document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); }
+          document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+        });
+      }
+    });
+
+    document.querySelectorAll(".menu-btn").forEach(function(btn){
+      btn.addEventListener("click", function(e){
+        e.stopPropagation();
+        var menu = btn.closest(".menu");
+        var was = menu.classList.contains("open");
+        closeMenus();
+        if (!was){ menu.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
+      });
+    });
+
+    document.addEventListener("click", function(e){
+      if (!e.target.closest || !e.target.closest(".menu")) closeMenus();
+    });
+
+    document.addEventListener("keydown", function(e){
+      if (e.key === "Escape"){ closeMenus(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "s"){ e.preventDefault(); persist(true); }
+    });
+
+    document.getElementById("filePicker").addEventListener("change", function(e){
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function(){
+        try {
+          var text = String(rd.result || "");
+          var title = f.name.replace(/\.[^.]+$/, "");
+          if (/<html[\s>]/i.test(text)){
+            var doc = new DOMParser().parseFromString(text, "text/html");
+            doc.querySelectorAll("script,style[data-apagar]").forEach(function(n){ n.remove(); });
+            var main = doc.querySelector("main") || doc.body;
+            text = main ? main.innerHTML : text;
+            var t = doc.querySelector("title");
+            if (t && t.textContent.trim()) title = t.textContent.trim();
+          }
+          titleEl.value = title;
+          if (editorReady) editor.renderFromHTML(text);
+          toast("Arquivo aberto: " + f.name, "success");
+        } catch(err){
+          toast("Falha ao abrir: " + err.message, "error");
+        }
+        e.target.value = "";
+      };
+      rd.readAsText(f);
+    });
+
+    titleEl.addEventListener("input", function(){ markDirty(); });
+
+    (function boot(){
+      initEditor();
+      refreshChecks();
+    })();
+  })();
 </script>
 
 </body>

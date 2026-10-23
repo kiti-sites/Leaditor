@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Editor.JS</title>
+  <script src="editorjs.umd.js"></script>
+  <script src="header.umd.js"></script>
+  <script src="list.umd.js"></script>
+  <script src="code.umd.js"></script>
+  <script src="quote.umd.js"></script>
+  <script src="delimiter.umd.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body { 
+      font-family: system-ui, -apple-system, sans-serif; 
+      padding: 2rem; 
+      background: #f4f5f7; 
+      margin: 0;
+    }
+
+    /* Contêiner Principal: aumentado para 850px e com padding seguro */
+    #editorjs { 
+      max-width: 850px; 
+      margin: 0 auto; 
+      padding: 2.5rem 3rem; /* Margem interna (topo/baixo e laterais) */
+      background: #fff; 
+      border-radius: 12px; 
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); 
+    }
+
+    /* Sobrescreve as larguras padrão internas do Editor.js */
+    .codex-editor__redactor {
+      padding-bottom: 100px !important;
+      margin-right: 0 !important;
+    }
+
+    /* Força os blocos de conteúdo a ocuparem 100% da largura do contêiner */
+    .ce-block__content {
+      max-width: 100% !important;
+      margin: 0 auto;
+    }
+
+    /* Garante que a barra de ferramentas alinhe corretamente com os blocos */
+    .ce-toolbar__content {
+      max-width: 100% !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="editorjs"></div>
+
+  <script>
+    const HeaderTool = window.Header;
+    const ListTool = window.EditorJSList || window.List || window.NestedList;
+    const CodeToolClass = window.EditorJSCode || window.CodeTool || window.Code;
+    const QuoteTool = window.Quote || window.EditorJSQuote;
+    const DelimiterTool = window.Delimiter || window.EditorJSDelimiter;
+
+    const tools = {};
+
+    if (HeaderTool) {
+      tools.header = {
+        class: HeaderTool,
+        inlineToolbar: true,
+        config: { placeholder: 'Digite um título...', levels: [1, 2, 3], defaultLevel: 2 }
+      };
+    }
+
+    if (ListTool) {
+      tools.list = {
+        class: ListTool,
+        inlineToolbar: true
+      };
+    }
+
+    if (CodeToolClass) {
+      tools.code = {
+        class: CodeToolClass
+      };
+    }
+
+    if (QuoteTool) {
+      tools.quote = {
+        class: QuoteTool,
+        inlineToolbar: true
+      };
+    }
+
+    if (DelimiterTool) {
+      tools.delimiter = {
+        class: DelimiterTool
+      };
+    }
+
+    const editor = new EditorJS({
+      holder: 'editorjs',
+      readOnly: false,
+      tools: tools
+    });
+  </script>
+</body>
+</html>
